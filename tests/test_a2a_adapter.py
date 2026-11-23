@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sources.adapters.a2a import A2ASourceAdapter
-from sources.adapter import SourceRecord, SourceUnavailableError, SourceError, SourceActDeniedError
+from sources_lib.adapters.a2a import A2ASourceAdapter
+from sources_lib.adapter import SourceRecord, SourceUnavailableError, SourceError, SourceActDeniedError
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

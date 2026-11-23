@@ -34,7 +34,7 @@ class HttpPollAdapter(BaseSourceAdapter):
             action: str, payload: dict[str, Any]) -> dict[str, Any]:
         if action == "fetch":
             return self._fetch(record)
-        raise __import__("sources").SourceActDeniedError(f"Unsupported: {action}")
+        raise __import__("sources_lib").SourceActDeniedError(f"Unsupported: {action}")
 
     def _fetch(self, record: SourceRecord) -> dict[str, Any]:
         url = record.config["url"]

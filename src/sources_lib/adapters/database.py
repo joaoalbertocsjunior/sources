@@ -39,7 +39,7 @@ class DatabaseAdapter(BaseSourceAdapter):
             action: str, payload: dict[str, Any]) -> dict[str, Any]:
         if action == "query":
             return {"rows": self._fetch(record, payload.get("query"))}
-        raise __import__("sources").SourceActDeniedError(f"Unsupported: {action}")
+        raise __import__("sources_lib").SourceActDeniedError(f"Unsupported: {action}")
 
     def _connect(self, record: SourceRecord):
         driver = record.config.get("driver", "sqlite3")

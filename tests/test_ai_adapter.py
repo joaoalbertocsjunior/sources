@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sources.adapter import SourceRecord, SourceUnavailableError, SourceActDeniedError, SourceError
-from sources.adapters.ai import AIExecutorAdapter
+from sources_lib.adapter import SourceRecord, SourceUnavailableError, SourceActDeniedError, SourceError
+from sources_lib.adapters.ai import AIExecutorAdapter
 
 
 def _record(config=None):

@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sources.adapter import SourceRecord, SourceUnavailableError, SourceActDeniedError, SourceError
-from sources.adapters.mcp import MCPSourceAdapter
+from sources_lib.adapter import SourceRecord, SourceUnavailableError, SourceActDeniedError, SourceError
+from sources_lib.adapters.mcp import MCPSourceAdapter
 
 
 def _record(config=None):

@@ -1,6 +1,6 @@
 import json, os, pytest, tempfile, pathlib
-from sources.adapters import FileAdapter, ShellAdapter, EnvAdapter, DatabaseAdapter, HttpPollAdapter
-from sources import SourceRegistry, SourceRecord
+from sources_lib.adapters import FileAdapter, ShellAdapter, EnvAdapter, DatabaseAdapter, HttpPollAdapter
+from sources_lib import SourceRegistry, SourceRecord
 
 
 def _reg(kind, adapter, config):
@@ -69,7 +69,7 @@ def test_database_adapter_sqlite(tmp_path):
 
 # HttpPollAdapter — test with a mock
 def test_http_poll_adapter_verify_bad_url():
-    from sources import SourceUnavailableError
+    from sources_lib import SourceUnavailableError
     reg = _reg("http", HttpPollAdapter(), {"url": "http://127.0.0.1:19999/nonexistent"})
     result = reg.verify("s1")
     assert result["ok"] is False

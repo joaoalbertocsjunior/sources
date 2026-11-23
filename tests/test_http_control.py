@@ -1,7 +1,8 @@
 import json, time, threading, urllib.request, pytest
-from sources import SourceRegistry, HTTPControlServer
-from sources.m2m import M2MServer
-from sources.adapters import FileAdapter
+from sources_lib import SourceRegistry
+from sources_lib.http import HTTPControlServer
+from sources_lib.m2m import M2MServer
+from sources_lib.adapters import FileAdapter
 
 
 BASE = "http://127.0.0.1"

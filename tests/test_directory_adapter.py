@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from sources.adapter import SourceRecord, SourceError, SourceUnavailableError, SourceActDeniedError
-from sources.adapters.directory import DirectoryAdapter
+from sources_lib.adapter import SourceRecord, SourceError, SourceUnavailableError, SourceActDeniedError
+from sources_lib.adapters.directory import DirectoryAdapter
 
 
 def _record(tmp_path, extra_config=None):

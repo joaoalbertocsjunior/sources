@@ -1,5 +1,5 @@
 import pytest
-from sources import (
+from sources_lib import (
     BaseSourceAdapter, SourceRecord, SourceRegistry, EventEmitter,
     LocalTransport, TransportError, SchemaError, validate_schema,
     SourceActDeniedError,
@@ -64,7 +64,7 @@ def test_schema_validation_on_add():
 
 
 def test_duplicate_source_id():
-    from sources.registry import RegistryError
+    from sources_lib.registry import RegistryError
     reg = SourceRegistry()
     reg.register_kind("echo", EchoAdapter())
     reg.add("echo", source_id="e1", config={"message": "a"})

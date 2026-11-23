@@ -1,5 +1,5 @@
 import time, threading, pytest
-from sources.m2m import M2MServer, M2MClient, RpcError
+from sources_lib.m2m import M2MServer, M2MClient, RpcError
 
 
 def _start_server(dispatch_fn=None, auth_fn=None, port=17100):
