@@ -12,6 +12,11 @@ from .registry import SourceRegistry
 from .events import EventEmitter
 from .schema import validate_schema, SchemaError
 from .transport import Transport, LocalTransport, TransportError
+from .adapters import (
+    FileAdapter, ShellAdapter, EnvAdapter,
+    WebhookAdapter, DatabaseAdapter, HttpPollAdapter,
+)
+from .m2m import M2MServer, M2MClient, RpcError, JobModel, TaskResult
 
 __all__ = [
     "SourceAdapter",
@@ -28,6 +33,17 @@ __all__ = [
     "Transport",
     "LocalTransport",
     "TransportError",
+    "FileAdapter",
+    "ShellAdapter",
+    "EnvAdapter",
+    "WebhookAdapter",
+    "DatabaseAdapter",
+    "HttpPollAdapter",
+    "M2MServer",
+    "M2MClient",
+    "RpcError",
+    "JobModel",
+    "TaskResult",
 ]
 
 __version__ = "0.1.0"
