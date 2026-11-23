@@ -17,6 +17,7 @@ from .adapters import (
     WebhookAdapter, DatabaseAdapter, HttpPollAdapter,
 )
 from .m2m import M2MServer, M2MClient, RpcError, JobModel, TaskResult
+from .http import HTTPControlServer
 
 __all__ = [
     "SourceAdapter",
@@ -44,6 +45,7 @@ __all__ = [
     "RpcError",
     "JobModel",
     "TaskResult",
+    "HTTPControlServer",
 ]
 
 __version__ = "0.1.0"
