@@ -104,7 +104,15 @@ class HTTPControlServer:
                                  "added_at": r.added_at} for r in records])
 
                 elif path == "/sources/kinds":
-                    self._json(ctrl.registry.kinds())
+                    kinds = ctrl.registry.kinds()
+                    result = {}
+                    for kind in kinds:
+                        try:
+                            adapter = ctrl.registry.adapter(kind)
+                            result[kind] = getattr(adapter, "config_schema", {})
+                        except Exception:
+                            result[kind] = {}
+                    self._json(result)
 
                 elif path.startswith("/sources/") and not path.endswith("/sync") \
                         and not path.endswith("/verify"):

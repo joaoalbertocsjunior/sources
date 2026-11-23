@@ -16,7 +16,16 @@ except ImportError:
 class AIExecutorAdapter(BaseSourceAdapter):
     """Run LLM inference via litellm as a source."""
 
-    config_schema: dict[str, Any] = {}
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "model": {"type": "string"},
+            "prompt": {"type": "string"},
+            "default_prompt": {"type": "string"},
+            "max_tokens": {"type": "integer"},
+            "api_key": {"type": "string"},
+        },
+    }
     actions = ["complete"]
 
     def __init__(self, model: str = "gpt-4o-mini", default_prompt: str = "") -> None:
@@ -26,33 +35,36 @@ class AIExecutorAdapter(BaseSourceAdapter):
     def verify(self, record: SourceRecord, config: dict[str, Any]) -> dict[str, Any]:
         if not _LITELLM_AVAILABLE:
             raise SourceUnavailableError("sources-lib[ai] required: pip install sources-lib[ai]")
+        model = record.config.get("model") or self.model
         try:
             _litellm.completion(
-                model=self.model,
+                model=model,
                 messages=[{"role": "user", "content": "ping"}],
                 max_tokens=1,
             )
-            return {"reachable": True, "model": self.model}
+            return {"reachable": True, "model": model}
         except Exception as exc:
             raise SourceUnavailableError(str(exc)) from exc
 
     def sync(self, record: SourceRecord, config: dict[str, Any]) -> list[dict[str, Any]]:
         if not _LITELLM_AVAILABLE:
             raise SourceUnavailableError("sources-lib[ai] required: pip install sources-lib[ai]")
+        model = record.config.get("model") or self.model
+        max_tokens = record.config.get("max_tokens") or config.get("max_tokens", 512)
         prompt = config.get("prompt") or record.config.get("prompt") or self.default_prompt
         if not prompt:
             return []
         try:
             response = _litellm.completion(
-                model=self.model,
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=config.get("max_tokens", 512),
+                max_tokens=max_tokens,
             )
             return [
                 {
                     "role": "assistant",
                     "content": response.choices[0].message.content,
-                    "model": self.model,
+                    "model": model,
                     "source_id": record.id,
                 }
             ]
@@ -70,13 +82,14 @@ class AIExecutorAdapter(BaseSourceAdapter):
             raise SourceActDeniedError(f"Unsupported action: {action}")
         if not _LITELLM_AVAILABLE:
             raise SourceUnavailableError("sources-lib[ai] required: pip install sources-lib[ai]")
+        model = record.config.get("model") or self.model
         messages = payload.get("messages") or [{"role": "user", "content": payload.get("prompt", "")}]
         response = _litellm.completion(
-            model=self.model,
+            model=model,
             messages=messages,
             max_tokens=payload.get("max_tokens", 512),
         )
-        return {"content": response.choices[0].message.content, "model": self.model}
+        return {"content": response.choices[0].message.content, "model": model}
 
     def supported_actions(self, record: SourceRecord, config: dict[str, Any]) -> list[str]:
         return ["complete"]

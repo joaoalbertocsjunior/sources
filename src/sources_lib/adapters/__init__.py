@@ -30,3 +30,9 @@ try:
     __all__ += ["MCPSourceAdapter"]
 except ImportError:
     pass
+
+try:
+    from .github import GitHubAdapter
+    __all__ += ["GitHubAdapter"]
+except ImportError:
+    pass

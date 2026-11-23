@@ -17,7 +17,14 @@ except ImportError:
 class MCPSourceAdapter(BaseSourceAdapter):
     """Expose an MCP server's tools as a source."""
 
-    config_schema: dict[str, Any] = {}
+    config_schema = {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+            "url": {"type": "string"},
+            "timeout": {"type": "integer"},
+        },
+    }
     actions = ["call_tool"]
 
     def __init__(self) -> None:
@@ -50,25 +57,22 @@ class MCPSourceAdapter(BaseSourceAdapter):
             raise SourceError(str(exc)) from exc
 
     async def _list_tools(self, url: str) -> list[dict[str, Any]]:
-        """Attempt to list tools from MCP server via SDK."""
-        try:
-            from mcp import ClientSession
-            from mcp.client.sse import sse_client
+        """List tools from MCP server via SDK."""
+        from mcp import ClientSession
+        from mcp.client.sse import sse_client
 
-            async with sse_client(url) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    result = await session.list_tools()
-                    return [
-                        {
-                            "name": tool.name,
-                            "description": getattr(tool, "description", ""),
-                            "input_schema": getattr(tool, "inputSchema", {}),
-                        }
-                        for tool in result.tools
-                    ]
-        except Exception:
-            return [{"name": "unknown", "description": "MCP tools listing requires mcp SDK"}]
+        async with sse_client(url) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
+                return [
+                    {
+                        "name": tool.name,
+                        "description": getattr(tool, "description", ""),
+                        "input_schema": getattr(tool, "inputSchema", {}),
+                    }
+                    for tool in result.tools
+                ]
 
     def act(
         self,

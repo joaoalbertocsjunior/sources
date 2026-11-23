@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os, time
 from typing import Any
-from ..adapter import BaseSourceAdapter, SourceRecord
+from ..adapter import BaseSourceAdapter, SourceRecord, SourceActDeniedError
 
 
 class EnvAdapter(BaseSourceAdapter):
@@ -15,6 +15,25 @@ class EnvAdapter(BaseSourceAdapter):
             "redact": {"type": "array", "items": {"type": "string"}},
         },
     }
+    actions = ["snapshot"]
+
+    def verify(self, record: SourceRecord, config: dict[str, Any]) -> dict[str, Any]:
+        keys = record.config.get("keys", [])
+        prefix = record.config.get("prefix", "")
+        if keys:
+            missing = [k for k in keys if k not in os.environ]
+            return {"ok": len(missing) == 0, "missing": missing}
+        if prefix:
+            found = any(k.startswith(prefix) for k in os.environ)
+            return {"ok": found}
+        return {"ok": True}
+
+    def act(self, record: SourceRecord, config: dict[str, Any],
+            action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if action == "snapshot":
+            rows = self.sync(record, config)
+            return {"rows": rows, "count": len(rows)}
+        raise SourceActDeniedError(f"Unsupported: {action}")
 
     def sync(self, record: SourceRecord, config: dict[str, Any]) -> list[dict[str, Any]]:
         prefix = record.config.get("prefix", "")

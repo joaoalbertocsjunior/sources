@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json, time, urllib.request
 from typing import Any
-from ..adapter import BaseSourceAdapter, SourceRecord, SourceUnavailableError
+from ..adapter import BaseSourceAdapter, SourceRecord, SourceUnavailableError, SourceActDeniedError
 
 
 class HttpPollAdapter(BaseSourceAdapter):
@@ -34,7 +34,7 @@ class HttpPollAdapter(BaseSourceAdapter):
             action: str, payload: dict[str, Any]) -> dict[str, Any]:
         if action == "fetch":
             return self._fetch(record)
-        raise __import__("sources_lib").SourceActDeniedError(f"Unsupported: {action}")
+        raise SourceActDeniedError(f"Unsupported: {action}")
 
     def _fetch(self, record: SourceRecord) -> dict[str, Any]:
         url = record.config["url"]
@@ -52,4 +52,14 @@ class HttpPollAdapter(BaseSourceAdapter):
             data = json.loads(body)
         except Exception:
             data = body
+        json_path = record.config.get("json_path")
+        if json_path and isinstance(data, dict):
+            extracted = data
+            for key in json_path.split("."):
+                if isinstance(extracted, dict) and key in extracted:
+                    extracted = extracted[key]
+                else:
+                    extracted = data
+                    break
+            data = extracted
         return {"url": url, "status": status, "body": data, "observed_at": time.time()}

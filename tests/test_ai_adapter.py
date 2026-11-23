@@ -20,7 +20,7 @@ def _record(config=None):
 
 def test_verify_unavailable_without_litellm():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", False):
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", False):
         with pytest.raises(SourceUnavailableError):
             adapter.verify(_record(), {})
 
@@ -28,8 +28,8 @@ def test_verify_unavailable_without_litellm():
 def test_verify_success():
     adapter = AIExecutorAdapter(model="gpt-4o-mini")
     fake_response = MagicMock()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.return_value = fake_response
         result = adapter.verify(_record(), {})
     assert result == {"reachable": True, "model": "gpt-4o-mini"}
@@ -37,8 +37,8 @@ def test_verify_success():
 
 def test_verify_raises_on_litellm_error():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.side_effect = RuntimeError("network error")
         with pytest.raises(SourceUnavailableError, match="network error"):
             adapter.verify(_record(), {})
@@ -50,7 +50,7 @@ def test_verify_raises_on_litellm_error():
 
 def test_sync_no_prompt_returns_empty():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True):
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True):
         result = adapter.sync(_record(), {})
     assert result == []
 
@@ -58,7 +58,7 @@ def test_sync_no_prompt_returns_empty():
 def test_sync_no_prompt_with_no_default_returns_empty():
     adapter = AIExecutorAdapter(default_prompt="")
     record = _record(config={"prompt": ""})
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True):
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True):
         result = adapter.sync(record, {})
     assert result == []
 
@@ -74,8 +74,8 @@ def test_sync_calls_litellm():
     fake_response = MagicMock()
     fake_response.choices = [fake_choice]
 
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.return_value = fake_response
         result = adapter.sync(record, {"prompt": "say hello"})
 
@@ -97,8 +97,8 @@ def test_sync_uses_record_config_prompt():
     fake_response = MagicMock()
     fake_response.choices = [fake_choice]
 
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.return_value = fake_response
         result = adapter.sync(record, {})
 
@@ -107,8 +107,8 @@ def test_sync_uses_record_config_prompt():
 
 def test_sync_raises_source_error_on_exception():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.side_effect = RuntimeError("boom")
         with pytest.raises(SourceError):
             adapter.sync(_record(), {"prompt": "hi"})
@@ -116,7 +116,7 @@ def test_sync_raises_source_error_on_exception():
 
 def test_sync_unavailable_without_litellm():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", False):
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", False):
         with pytest.raises(SourceUnavailableError):
             adapter.sync(_record(), {"prompt": "hi"})
 
@@ -135,8 +135,8 @@ def test_act_complete():
     fake_response = MagicMock()
     fake_response.choices = [fake_choice]
 
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.return_value = fake_response
         result = adapter.act(_record(), {}, "complete", {"prompt": "hi"})
 
@@ -152,7 +152,7 @@ def test_act_unsupported_action():
 
 def test_act_complete_unavailable_without_litellm():
     adapter = AIExecutorAdapter()
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", False):
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", False):
         with pytest.raises(SourceUnavailableError):
             adapter.act(_record(), {}, "complete", {"prompt": "hi"})
 
@@ -169,8 +169,8 @@ def test_act_uses_messages_from_payload():
 
     messages = [{"role": "user", "content": "custom message"}]
 
-    with patch("sources.adapters.ai._LITELLM_AVAILABLE", True), \
-         patch("sources.adapters.ai._litellm") as mock_litellm:
+    with patch("sources_lib.adapters.ai._LITELLM_AVAILABLE", True), \
+         patch("sources_lib.adapters.ai._litellm") as mock_litellm:
         mock_litellm.completion.return_value = fake_response
         result = adapter.act(_record(), {}, "complete", {"messages": messages})
 

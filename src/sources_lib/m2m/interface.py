@@ -10,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 from urllib import request as _urllib_request
 
+from ..schema import validate_schema, SchemaError
+
 
 # ── Data models ───────────────────────────────────────────────────────────────
 
@@ -87,11 +89,15 @@ class M2MServer:
         self,
         dispatch_fn: Callable[[str, dict[str, Any]], Any] | None = None,
         auth_fn: Callable[[str], bool] | None = None,
+        registry=None,
     ) -> None:
         self._dispatch_fn = dispatch_fn
         self._auth_fn = auth_fn
+        self._registry = registry
         self._jobs: dict[str, JobModel] = {}
         self._jobs_lock = threading.Lock()
+        self._methods: dict[str, tuple[Callable, dict | None]] = {}
+        self._methods_lock = threading.Lock()
         self._server: ThreadingHTTPServer | None = None
 
     def start(self, host: str = "127.0.0.1", port: int = 7000) -> None:
@@ -109,6 +115,16 @@ class M2MServer:
     def handle(self, method: str, params: dict[str, Any]) -> Any:
         """Call directly (without HTTP) for testing or embedded use."""
         return self._dispatch(method, params)
+
+    def register(
+        self,
+        method: str,
+        handler: Callable[[dict[str, Any]], Any],
+        params_schema: dict[str, Any] | None = None,
+    ) -> None:
+        """Register a named RPC method with an optional JSON Schema for params validation."""
+        with self._methods_lock:
+            self._methods[method] = (handler, params_schema)
 
     # ── internals ─────────────────────────────────────────────────────────────
 
@@ -137,6 +153,37 @@ class M2MServer:
             if self._dispatch_fn:
                 threading.Thread(target=self._run_job, args=(job,), daemon=True).start()
             return {"id": job.id, "status": job.status}
+        if method == "rpc.listMethods":
+            builtin = ["ping", "jobs.list", "jobs.get", "jobs.submit", "rpc.listMethods",
+                       "sources.add", "sources.remove"]
+            with self._methods_lock:
+                registered = list(self._methods)
+            return {"methods": builtin + registered}
+        if method == "sources.add":
+            if self._registry is None:
+                raise RpcError(-32603, "No registry configured")
+            kind = params.get("kind", "")
+            sid = params.get("id")
+            config = params.get("config", {})
+            record = self._registry.add(kind, source_id=sid, config=config)
+            return {"id": record.id, "kind": record.kind}
+        if method == "sources.remove":
+            if self._registry is None:
+                raise RpcError(-32603, "No registry configured")
+            sid = params.get("id", "")
+            self._registry.remove(sid)
+            return {"removed": sid}
+        # Registered methods
+        with self._methods_lock:
+            entry = self._methods.get(method)
+        if entry is not None:
+            handler, schema = entry
+            if schema:
+                try:
+                    validate_schema(params, schema)
+                except SchemaError as exc:
+                    raise RpcError(-32602, f"Invalid params: {exc}")
+            return handler(params)
         # Delegate
         if self._dispatch_fn:
             return self._dispatch_fn(method, params)

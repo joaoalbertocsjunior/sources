@@ -9,6 +9,7 @@ from .adapter import (
     BaseSourceAdapter,
 )
 from .registry import SourceRegistry
+from .bridge import Bridge
 from .events import EventEmitter
 from .schema import validate_schema, SchemaError
 from .transport import Transport, LocalTransport, TransportError
@@ -24,6 +25,7 @@ __all__ = [
     "SourceActDeniedError",
     "BaseSourceAdapter",
     "SourceRegistry",
+    "Bridge",
     "EventEmitter",
     "validate_schema",
     "SchemaError",

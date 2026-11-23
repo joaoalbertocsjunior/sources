@@ -104,3 +104,30 @@ class SourceRegistry:
             app_config: dict[str, Any] | None = None) -> dict[str, Any]:
         record = self.get(source_id)
         return self.adapter(record.kind).act(record, app_config or {}, action, payload or {})
+
+    def load_config(self, config: dict[str, Any] | str) -> list[SourceRecord]:
+        """Register source instances from a dict or JSON file path.
+
+        config must be a dict with a 'sources' list, each entry having at minimum
+        'kind' and optionally 'id' and 'config' keys. Returns list of added records.
+
+        Example config dict:
+          {"sources": [
+            {"kind": "file", "id": "logs", "config": {"path": "/var/log/app.log"}},
+            {"kind": "env",  "id": "env",  "config": {"prefix": "APP_"}},
+          ]}
+        """
+        import json as _json
+        import pathlib as _pathlib
+        if isinstance(config, str):
+            config = _json.loads(_pathlib.Path(config).read_text())
+        records = []
+        for entry in config.get("sources", []):
+            kind = entry.get("kind", "")
+            sid = entry.get("id")
+            cfg = entry.get("config", {})
+            if not kind:
+                continue
+            record = self.add(kind, source_id=sid, config=cfg)
+            records.append(record)
+        return records
