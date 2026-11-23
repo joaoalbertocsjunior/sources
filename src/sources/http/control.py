@@ -5,11 +5,28 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from urllib.parse import urlparse, parse_qs
 
-from ..registry import SourceRegistry
-from ..m2m.interface import M2MServer, RpcError
+if TYPE_CHECKING:
+    from ..registry import SourceRegistry
+    from ..m2m.interface import M2MServer
+
+
+@runtime_checkable
+class _RegistryLike(Protocol):
+    def list(self) -> list: ...
+    def kinds(self) -> list[str]: ...
+    def get(self, source_id: str): ...
+    def sync(self, source_id: str) -> list: ...
+    def verify(self, source_id: str) -> dict: ...
+    def act(self, source_id: str, action: str, *, payload: dict) -> dict: ...
+    def add(self, kind: str, *, source_id: str | None, config: dict): ...
+
+
+@runtime_checkable
+class _M2MLike(Protocol):
+    def handle(self, method: str, params: dict) -> Any: ...
 
 
 class HTTPControlHandler(BaseHTTPRequestHandler):
@@ -45,12 +62,15 @@ class HTTPControlServer:
 
     def __init__(
         self,
-        registry: SourceRegistry | None = None,
-        m2m: M2MServer | None = None,
+        registry: _RegistryLike | SourceRegistry | None = None,
+        m2m: _M2MLike | M2MServer | None = None,
         auth_fn: Callable[[str], bool] | None = None,
     ) -> None:
-        self.registry = registry or SourceRegistry()
-        self.m2m = m2m
+        if registry is None:
+            from ..registry import SourceRegistry as _SR
+            registry = _SR()
+        self.registry: _RegistryLike = registry  # type: ignore[assignment]
+        self.m2m: _M2MLike | None = m2m  # type: ignore[assignment]
         self.auth_fn = auth_fn
         self._server: ThreadingHTTPServer | None = None
 
@@ -111,8 +131,8 @@ class HTTPControlServer:
                     try:
                         job = ctrl.m2m.handle("jobs.get", {"id": jid})
                         self._json(job)
-                    except RpcError as exc:
-                        self._json({"error": exc.message}, 404)
+                    except Exception as exc:
+                        self._json({"error": str(exc)}, 404)
 
                 else:
                     self._json({"error": "Not found"}, 404)
@@ -132,13 +152,15 @@ class HTTPControlServer:
                     try:
                         result = ctrl.m2m.handle(method, params)
                         self._json({"jsonrpc": "2.0", "result": result, "id": body.get("id")})
-                    except RpcError as exc:
-                        self._json({"jsonrpc": "2.0", "error": exc.to_dict(),
-                                    "id": body.get("id")})
                     except Exception as exc:
-                        self._json({"jsonrpc": "2.0",
-                                    "error": {"code": -32603, "message": str(exc)},
-                                    "id": body.get("id")})
+                        # Detect RpcError duck-type: has .to_dict()
+                        if hasattr(exc, "to_dict"):
+                            self._json({"jsonrpc": "2.0", "error": exc.to_dict(),  # type: ignore[attr-defined]
+                                        "id": body.get("id")})
+                        else:
+                            self._json({"jsonrpc": "2.0",
+                                        "error": {"code": -32603, "message": str(exc)},
+                                        "id": body.get("id")})
 
                 elif path.endswith("/sync"):
                     sid = path.split("/")[2]
