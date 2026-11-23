@@ -5,6 +5,7 @@ from .env import EnvAdapter
 from .webhook import WebhookAdapter
 from .database import DatabaseAdapter
 from .http_poll import HttpPollAdapter
+from .a2a import A2ASourceAdapter
 
 __all__ = [
     "FileAdapter",
@@ -13,6 +14,7 @@ __all__ = [
     "WebhookAdapter",
     "DatabaseAdapter",
     "HttpPollAdapter",
+    "A2ASourceAdapter",
 ]
 
 try:

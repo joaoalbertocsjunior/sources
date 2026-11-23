@@ -26,6 +26,7 @@ dependencies = []
 #   pip install sources-lib[postgres]   — DatabaseAdapter with psycopg2
 #   pip install sources-lib[http]       — HttpPollAdapter with httpx
 [project.optional-dependencies]
+# a2a adapter uses stdlib only — no extra needed
 validation = ["jsonschema>=4.0"]
 test = ["pytest>=8.0", "pytest-timeout>=2.0"]
 postgres = ["psycopg2-binary>=2.9"]
