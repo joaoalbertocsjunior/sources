@@ -178,3 +178,59 @@ class LocalTransport:
         import re
         safe = re.sub(r"[^a-zA-Z0-9_]", "_", name)
         return safe or "data"
+
+
+import ssl as _ssl
+
+
+class HttpAdapter(Protocol):
+    """Port for JSON-POST over HTTPS."""
+
+    def post_json(self, url: str, payload: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]: ...
+
+
+class HttpxTransport:
+    """HttpAdapter backed by httpx (requires sources-lib[http])."""
+
+    def post_json(self, url: str, payload: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]:
+        try:
+            import httpx
+        except ImportError:
+            raise TransportError("sources-lib[http] required: pip install sources-lib[http]")
+        with httpx.Client(verify=False, timeout=timeout) as client:
+            resp = client.post(url, json=payload, headers={"Content-Type": "application/json"})
+            resp.raise_for_status()
+            return resp.json()
+
+
+class StdlibHttpTransport:
+    """HttpAdapter backed by stdlib — zero extra deps."""
+
+    def post_json(self, url: str, payload: dict[str, Any], *, timeout: float = 10.0) -> dict[str, Any]:
+        import http.client
+        import urllib.parse
+        u = urllib.parse.urlsplit(url)
+        body = json.dumps(payload, separators=(",", ":")).encode()
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        conn = http.client.HTTPSConnection(u.hostname, u.port or 443, context=ctx, timeout=timeout)
+        try:
+            conn.request("POST", u.path or "/", body,
+                         {"Content-Type": "application/json", "Content-Length": str(len(body))})
+            resp = conn.getresponse()
+            data = resp.read(4 * 1024 * 1024)
+            if resp.status != 200:
+                raise TransportError(f"HTTP {resp.status}")
+            return json.loads(data)
+        finally:
+            conn.close()
+
+
+def make_http_transport() -> HttpAdapter:
+    """Return HttpxTransport if httpx is installed, else StdlibHttpTransport."""
+    try:
+        import httpx  # noqa: F401
+        return HttpxTransport()
+    except ImportError:
+        return StdlibHttpTransport()

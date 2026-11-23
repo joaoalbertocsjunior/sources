@@ -10,9 +10,9 @@ from .adapter import (
 )
 from .registry import SourceRegistry
 from .bridge import Bridge
-from .events import EventEmitter
+from .events import EventEmitter, EventBus
 from .schema import validate_schema, SchemaError
-from .transport import Transport, LocalTransport, TransportError
+from .transport import Transport, LocalTransport, TransportError, HttpAdapter, HttpxTransport, StdlibHttpTransport, make_http_transport
 
 __version__ = "0.1.0"
 
@@ -32,4 +32,9 @@ __all__ = [
     "Transport",
     "LocalTransport",
     "TransportError",
+    "EventBus",
+    "HttpAdapter",
+    "HttpxTransport",
+    "StdlibHttpTransport",
+    "make_http_transport",
 ]
