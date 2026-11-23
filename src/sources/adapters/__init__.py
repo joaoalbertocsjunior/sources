@@ -6,6 +6,7 @@ from .webhook import WebhookAdapter
 from .database import DatabaseAdapter
 from .http_poll import HttpPollAdapter
 from .a2a import A2ASourceAdapter
+from .directory import DirectoryAdapter
 
 __all__ = [
     "FileAdapter",
@@ -15,6 +16,7 @@ __all__ = [
     "DatabaseAdapter",
     "HttpPollAdapter",
     "A2ASourceAdapter",
+    "DirectoryAdapter",
 ]
 
 try:
