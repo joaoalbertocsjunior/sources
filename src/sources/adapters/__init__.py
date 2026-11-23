@@ -14,3 +14,15 @@ __all__ = [
     "DatabaseAdapter",
     "HttpPollAdapter",
 ]
+
+try:
+    from .ai import AIExecutorAdapter
+    __all__ += ["AIExecutorAdapter"]
+except ImportError:
+    pass
+
+try:
+    from .mcp import MCPSourceAdapter
+    __all__ += ["MCPSourceAdapter"]
+except ImportError:
+    pass
