@@ -1,0 +1,69 @@
+name: Release binary
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: sources-lib-linux-x86_64
+            binary: sources-lib
+          - os: macos-latest
+            artifact: sources-lib-macos-arm64
+            binary: sources-lib
+          - os: windows-latest
+            artifact: sources-lib-windows-x86_64
+            binary: sources-lib.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sources-lib + all extras + PyInstaller
+        run: |
+          pip install ".[all]" pyinstaller
+
+      - name: Build binary
+        run: pyinstaller sources_lib.spec
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          mv dist/${{ matrix.binary }} dist/release/${{ matrix.artifact }} 2>/dev/null || \
+          mv dist/${{ matrix.binary }} dist/release/${{ matrix.artifact }}.exe 2>/dev/null || true
+          # normalize: drop .exe suffix from non-windows names
+          ls dist/release/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true

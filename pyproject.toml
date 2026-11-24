@@ -36,6 +36,9 @@ mcp      = ["mcp>=1.0"]
 github   = ["PyGithub>=2.1"]
 all      = ["psycopg2-binary>=2.9", "httpx>=0.27", "litellm>=1.0", "mcp>=1.0", "PyGithub>=2.1"]
 
+[project.scripts]
+sources-lib = "sources_lib.__main__:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sources_lib"]
 

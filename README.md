@@ -2,6 +2,8 @@
 
 Agnostic sources adapter, JSON-RPC 2.0 M2M interface, HTTP control server, and event/transport utilities. Stdlib only at core — extras add richer backends.
 
+**Python 3.11+ required for library use.** Non-Python stacks (Rust, Go, Node, …) use the standalone binary — no Python install needed on the target machine.
+
 ## Install
 
 ```bash
@@ -11,6 +13,40 @@ pip install sources-lib[ai]           # AIExecutorAdapter (litellm)
 pip install sources-lib[mcp]          # MCPSourceAdapter (mcp SDK)
 pip install sources-lib[github]       # GitHubAdapter (PyGithub)
 pip install sources-lib[http]         # HttpxTransport (httpx)
+```
+
+## Standalone binary (polyglot stacks)
+
+Pre-built binaries for Linux x86\_64, macOS arm64, and Windows x86\_64 are published on every [GitHub Release](../../releases). Download, make executable, and spawn from any language:
+
+```rust
+// Rust example — no Python install required on target machine
+Command::new("sources-lib")
+    .args(["serve", "--port", "7000", "--token", "secret"])
+    .spawn()?;
+```
+
+```go
+// Go
+exec.Command("sources-lib", "serve", "--port", "7000").Start()
+```
+
+Then talk to it over HTTP (see M2M and HTTP Control sections below). Build locally:
+
+```bash
+pip install ".[all]" pyinstaller
+pyinstaller sources_lib.spec
+# → dist/sources-lib
+```
+
+## Serve (CLI)
+
+```bash
+# Start REST + JSON-RPC server on port 8080
+python -m sources_lib serve --port 8080 --token mysecret
+
+# Pre-load sources from a JSON config file
+python -m sources_lib serve --port 8080 --config sources.json
 ```
 
 ## Layers
@@ -85,6 +121,10 @@ server.start(port=8080)
 ```
 
 Routes: `GET /health`, `GET /sources`, `GET /sources/kinds` (returns `{kind: schema}`), `POST /sources`, `POST /sources/{id}/sync`, `POST /sources/{id}/verify`, `POST /sources/{id}/act/{action}`, `POST /rpc`, `GET /jobs`, `GET /jobs/{id}`.
+
+**Embedding in your own framework:** `SourceRegistry` and `M2MServer` are plain objects — no server is started until you call `.start()`. If you already run Flask, FastAPI, or any other HTTP framework, skip `HTTPControlServer` and call the registry/M2M objects directly from your own route handlers.
+
+**Remaining platform constraint:** the standalone binary must be built for the target OS/arch. The release CI covers Linux x86\_64, macOS arm64, and Windows x86\_64. Other targets (e.g. Linux arm64, musl libc) require a local build with `pyinstaller sources_lib.spec` on the target platform.
 
 ## Bridge
 
