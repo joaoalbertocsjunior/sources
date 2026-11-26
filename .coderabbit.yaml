@@ -1,0 +1,120 @@
+# CodeRabbit AI reviewer configuration — sources-lib
+# https://docs.coderabbit.ai/getting-started/configure-coderabbit
+version: "2"
+
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+
+  profile: "chill"
+
+  instructions: |
+    sources-lib is the agnostic source adapter protocol, registry, and M2M interface
+    used by URACE (and other consumers). It provides: SourceAdapter trait, SourceRegistry
+    (DashMap-backed, concurrent), Bridge, EventBus, HttpControlServer (axum), M2MServer
+    and M2MClient (JSON-RPC 2.0), and 13 source adapters.
+
+    Hard invariants — flag any violation:
+    - Adapter protocol: every adapter must implement the full `SourceAdapter` trait.
+      `sync()` must never panic — it must return `SourceError` on failure.
+    - Registry concurrency: `SourceRegistry` is shared across async tasks via `Arc`.
+      Flag any interior mutability that uses `Mutex` where `DashMap` or `RwLock`
+      would be more appropriate, and flag any lock held across an `.await` point.
+    - JSON-RPC 2.0 wire format: `M2MServer` and `M2MClient` must always set
+      `jsonrpc: "2.0"`. Flag any deviation from the spec (RFC 7159 / JSON-RPC 2.0).
+    - Error propagation: adapters must not swallow errors silently. Flag
+      `let _ = result` or empty `Err(_) => {}` arms in adapter or registry code.
+    - No hardcoded credentials or tokens.
+
+    Style:
+    - Do not suggest adding comments explaining WHAT the code does.
+    - Do not suggest multi-line doc comments; one short `///` line max.
+
+  path_instructions:
+
+    # Core adapter protocol
+    - path: "src/adapter.rs"
+      instructions: |
+        `SourceAdapter` trait is the public contract. Flag any change that would
+        require existing adapter implementations to add unimplemented methods without
+        a provided default. Flag removal of `#[async_trait]` — it is required for
+        object safety with async methods.
+        `SourceRecord` fields (`id`, `kind`, `added_at`) must remain stable — they
+        are part of the M2M wire format.
+
+    # Registry
+    - path: "src/registry.rs"
+      instructions: |
+        DashMap provides lock-free concurrent reads. Flag any replacement of DashMap
+        with `Mutex<HashMap>` without a documented reason.
+        `register_kind` and `add` must be idempotent-safe: re-registering the same
+        kind or ID must return a clear error, not silently overwrite.
+        Flag any `unwrap()` on `DashMap` operations — they should not panic, but
+        validate the assumption with a comment if one is used.
+
+    # M2M server and client
+    - path: "src/m2m.rs"
+      instructions: |
+        JSON-RPC 2.0 compliance: every response must include `"jsonrpc": "2.0"` and
+        exactly one of `result` or `error`. Flag any path that sets both or neither.
+        Error codes: use standard codes (-32700 parse error, -32600 invalid request,
+        -32601 method not found, -32602 invalid params, -32603 internal error).
+        Flag custom codes in the standard range (-32768 to -32000).
+        `M2MClient::call`: HTTP errors and JSON parse errors must surface as
+        `M2MClientError`, never panic. Flag any `.unwrap()` in the client path.
+        `M2MClient` must not hold a persistent TCP connection that could block other
+        callers — use `reqwest::Client` (which pools internally).
+
+    # HTTP control server
+    - path: "src/http.rs"
+      instructions: |
+        `HttpControlServer` binds to a port — flag hardcoded `0.0.0.0` without a
+        note that this is intentional and scoped to trusted networks.
+        All routes must reject malformed JSON with a 400 response, not panic.
+        Flag any route that does not validate the request body before processing.
+
+    # Event bus
+    - path: "src/events.rs"
+      instructions: |
+        `EventBus` subscribers must not block the publish path. Flag any synchronous
+        subscriber that could stall the bus under backpressure.
+        Flag `Arc<Mutex<Vec<Subscriber>>>` patterns that hold the lock while calling
+        subscriber callbacks — use a channel or clone-and-call pattern instead.
+
+    # Individual adapters
+    - path: "src/adapters/git.rs"
+      instructions: |
+        `git2` operations on remote repos can block indefinitely. Flag any path that
+        calls a potentially-blocking git2 operation without a timeout or on the async
+        executor thread.
+
+    - path: "src/adapters/database.rs"
+      instructions: |
+        SQLx connection strings may contain credentials. Flag any path that logs the
+        connection string or includes it in error messages. Use `sqlx::Error` display
+        which redacts credentials.
+
+    - path: "src/adapters/shell.rs"
+      instructions: |
+        Shell adapter executes arbitrary commands. Flag any path where the command
+        string is constructed from untrusted external input without sanitisation.
+        Flag missing timeout on command execution.
+
+    - path: "src/adapters/http_poll.rs"
+      instructions: |
+        Polling HTTP endpoints: flag missing request timeout. Flag any path that
+        follows redirects to `file://` or `data://` URIs (SSRF risk).
+
+    # CI
+    - path: ".github/workflows/*.yml"
+      instructions: |
+        Supply chain: flag third-party actions not pinned to a full commit SHA.
+        Secrets must not be echoed to build logs.
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+
+chat:
+  auto_reply: true

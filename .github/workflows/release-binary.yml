@@ -1,4 +1,4 @@
-name: Release binary
+name: Release
 
 on:
   push:
@@ -10,48 +10,52 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
             artifact: sources-lib-linux-x86_64
-            binary: sources-lib
           - os: macos-latest
+            target: aarch64-apple-darwin
             artifact: sources-lib-macos-arm64
-            binary: sources-lib
           - os: windows-latest
-            artifact: sources-lib-windows-x86_64
-            binary: sources-lib.exe
+            target: x86_64-pc-windows-msvc
+            artifact: sources-lib-windows-x86_64.exe
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: "3.12"
+          targets: ${{ matrix.target }}
 
-      - name: Install sources-lib + all extras + PyInstaller
+      - name: Install musl tools (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Stage artifact (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
-          pip install ".[all]" pyinstaller
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/sources-lib dist/${{ matrix.artifact }}
 
-      - name: Build binary
-        run: pyinstaller sources_lib.spec
-
-      - name: Rename artifact
+      - name: Stage artifact (Windows)
+        if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          mkdir -p dist/release
-          mv dist/${{ matrix.binary }} dist/release/${{ matrix.artifact }} 2>/dev/null || \
-          mv dist/${{ matrix.binary }} dist/release/${{ matrix.artifact }}.exe 2>/dev/null || true
-          # normalize: drop .exe suffix from non-windows names
-          ls dist/release/
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/sources-lib.exe dist/${{ matrix.artifact }}
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/release/
+          path: dist/
 
   release:
     needs: build
@@ -62,8 +66,7 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**
           generate_release_notes: true
