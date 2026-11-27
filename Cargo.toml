@@ -4,8 +4,11 @@ version     = "0.1.0"
 edition     = "2021"
 license     = "Apache-2.0"
 authors     = ["URACE Contributors"]
-description = "Source adapters, registry, M2M bridge, and HTTP control server"
+description = "Source adapters, registry, JSON-RPC server, and HTTP control plane"
 repository  = "https://github.com/joaoalbertocsjunior/sources"
+
+[lib]
+name = "sources_lib"
 
 [dependencies]
 axum          = { version = "0.7", features = ["json", "macros"] }
@@ -20,4 +23,8 @@ thiserror     = "1"
 tracing       = "0.1"
 async-trait   = "0.1"
 uuid          = { version = "1", features = ["v4"] }
-base64 = "0.23.1"
+base64            = "0.23.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+vendored = ["git2/vendored-libgit2"]

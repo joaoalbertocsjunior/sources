@@ -25,7 +25,7 @@ pub type Handler = Box<dyn Fn(Value) -> Value + Send + Sync>;
 /// Accepts `POST /rpc` with body `{"method": "...", "params": {...}}`.
 /// Dispatches to a registered handler; returns `{"result": ...}` or
 /// `{"error": "method not found"}`.
-pub struct M2MServer {
+pub struct RpcServer {
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
     bind_addr: SocketAddr,
 }
@@ -45,11 +45,11 @@ enum RpcResponse {
 }
 
 #[derive(Clone)]
-struct M2MState {
+struct RpcState {
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
 }
 
-impl M2MServer {
+impl RpcServer {
     pub fn new(bind_addr: SocketAddr) -> Self {
         Self {
             handlers: Arc::new(Mutex::new(HashMap::new())),
@@ -100,7 +100,7 @@ impl M2MServer {
 
     /// Build the axum router.
     pub fn router(&self) -> Router {
-        let state = M2MState {
+        let state = RpcState {
             handlers: Arc::clone(&self.handlers),
         };
         Router::new().route("/rpc", post(rpc_handler)).with_state(state)
@@ -111,13 +111,13 @@ impl M2MServer {
         let addr = self.bind_addr;
         let router = self.router();
         let listener = tokio::net::TcpListener::bind(addr).await?;
-        tracing::info!("M2MServer listening on {addr}");
+        tracing::info!("RpcServer listening on {addr}");
         axum::serve(listener, router).await
     }
 }
 
 async fn rpc_handler(
-    State(state): State<M2MState>,
+    State(state): State<RpcState>,
     Json(req): Json<RpcRequest>,
 ) -> impl IntoResponse {
     let handlers = state.handlers.lock().await;

@@ -213,7 +213,7 @@ sources-lib was extracted from the URACE runtime specifically to be a standalone
 
 ## 26. Application Contact
 
-João Alberto Cambauva dos Santos Junior — myrianldamaro@gmail.com
+João Alberto Cambauva dos Santos Junior — joaoalbertocsjunior@gmail.com
 
 ---
 
@@ -221,4 +221,4 @@ João Alberto Cambauva dos Santos Junior — myrianldamaro@gmail.com
 
 | Name | Country | Email address |
 |---|---|---|
-| João Alberto Cambauva dos Santos Junior | Brazil | myrianldamaro@gmail.com |
+| João Alberto Cambauva dos Santos Junior | Brazil | joaoalbertocsjunior@gmail.com |

@@ -23,12 +23,51 @@ LangChain, LlamaIndex, and the MCP SDKs are Python/TypeScript-first. If you're r
 
 ## Install
 
+**As a Rust library:**
+
 ```toml
 [dependencies]
 sources-lib = { git = "https://github.com/joaoalbertocsjunior/sources" }
 ```
 
 > crates.io publish coming — track [#3](https://github.com/joaoalbertocsjunior/sources/issues/3)
+
+**As a standalone binary (sidecar):**
+
+Download the precompiled binary for your platform from [Releases](https://github.com/joaoalbertocsjunior/sources/releases):
+
+```bash
+# Linux x86_64
+curl -Lo sources https://github.com/joaoalbertocsjunior/sources/releases/latest/download/sources-linux-x86_64
+chmod +x sources
+./sources --m2m 0.0.0.0:7000 --http 0.0.0.0:8080
+```
+
+```bash
+# macOS arm64
+curl -Lo sources https://github.com/joaoalbertocsjunior/sources/releases/latest/download/sources-macos-arm64
+chmod +x sources
+./sources --m2m 0.0.0.0:7000 --http 0.0.0.0:8080
+```
+
+```powershell
+# Windows x86_64
+Invoke-WebRequest -Uri https://github.com/joaoalbertocsjunior/sources/releases/latest/download/sources-windows-x86_64.exe -OutFile sources.exe
+.\sources.exe --m2m 0.0.0.0:7000 --http 0.0.0.0:8080
+```
+
+No Python, Rust, or other runtime required on the target host. Spawn it as a subprocess and call it over HTTP/JSON-RPC 2.0.
+
+```
+Options:
+  --m2m  ADDR   JSON-RPC 2.0 listen address  [default: 0.0.0.0:7000]
+  --http ADDR   HTTP control plane address    [default: 0.0.0.0:8080]
+  --data DIR    Persistence directory         [optional]
+  --no-m2m      Disable the JSON-RPC server
+  --no-http     Disable the HTTP control server
+```
+
+To build from source for any platform, see [BUILDING.md](BUILDING.md).
 
 ---
 
@@ -115,19 +154,19 @@ server.serve().await?;
 
 ---
 
-## M2M — JSON-RPC 2.0
+## RPC — JSON-RPC 2.0 (M2M)
 
 Expose your registry over JSON-RPC 2.0 so any language can call it over HTTP:
 
 ```rust
 use std::sync::Arc;
-use sources_lib::{SourceRegistry, KindRegistry, SourceService, M2MServer};
+use sources_lib::{SourceRegistry, KindRegistry, SourceService, RpcServer};
 
 let service = Arc::new(
     SourceService::new(Arc::new(SourceRegistry::new()), KindRegistry::new())
 );
 
-let server = M2MServer::new("0.0.0.0:7000".parse().unwrap());
+let server = RpcServer::new("0.0.0.0:7000".parse().unwrap());
 server.wire_service(Arc::clone(&service)).await;  // registers sources.* methods
 server.register("echo", |params| params).await;   // add custom methods
 server.serve().await?;
@@ -272,9 +311,9 @@ bus.publish(event);
 | `sources_lib` | `SourceAdapter` trait, `SourceRegistry`, `SourceEvent`, `AdapterError` |
 | `sources_lib::adapters` | All 14 built-in adapters |
 | `sources_lib::kinds` | `KindRegistry`, `KindDef`, `KindBacking` — runtime kind registration |
-| `sources_lib::service` | `SourceService` — shared business logic for HTTP and M2M |
+| `sources_lib::service` | `SourceService` — shared business logic for HTTP and RPC |
 | `sources_lib::store` | `Store`, `StoredSource` — file-backed persistence |
-| `sources_lib::m2m` | JSON-RPC 2.0 server with `wire_service` |
+| `sources_lib::rpc` | JSON-RPC 2.0 server with `wire_service` |
 | `sources_lib::http` | Axum REST control server |
 | `sources_lib::bridge` | Stateless source-to-source connector |
 | `sources_lib::events` | `EventBus` broadcast pub/sub |

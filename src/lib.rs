@@ -1,13 +1,10 @@
-//! `urace-sources` — source adapters, registry, M2M bridge, and HTTP control server.
-//!
-//! Replaces the external Python `sources-lib` git dependency with a native Rust
-//! implementation that uses real crates from the workspace.
+//! `sources-lib` — source adapters, registry, JSON-RPC server, and HTTP control plane.
 //!
 //! # Quick start
 //!
 //! ```rust,no_run
-//! use urace_sources::{SourceRegistry, SourceBridge};
-//! use urace_sources::adapters::shell::ShellAdapter;
+//! use sources_lib::{SourceRegistry, SourceBridge};
+//! use sources_lib::adapters::shell::ShellAdapter;
 //! use std::time::Duration;
 //!
 //! # async fn example() {
@@ -29,7 +26,7 @@ pub mod bridge;
 pub mod events;
 pub mod http;
 pub mod kinds;
-pub mod m2m;
+pub mod rpc;
 pub mod mcp;
 pub mod registry;
 pub mod service;
@@ -41,7 +38,7 @@ pub use bridge::SourceBridge;
 pub use events::EventBus;
 pub use http::HttpControlServer;
 pub use kinds::{KindBacking, KindDef, KindRegistry};
-pub use m2m::M2MServer;
+pub use rpc::RpcServer;
 pub use mcp::server::McpServer;
 pub use registry::SourceRegistry;
 pub use service::SourceService;

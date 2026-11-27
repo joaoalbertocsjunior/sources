@@ -19,7 +19,7 @@ pub struct A2ASourceAdapter {
 impl A2ASourceAdapter {
     pub fn new() -> Result<Self, SourceError> {
         let client = Client::builder()
-            .user_agent("urace-sources-lib/0.1")
+            .user_agent("sources-lib/0.1")
             .build()
             .map_err(|e| SourceError::Unavailable(e.to_string()))?;
         Ok(A2ASourceAdapter { client })
