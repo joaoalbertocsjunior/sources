@@ -97,6 +97,9 @@ server.serve().await?;
 | `sources://{id}/events` | Latest synced events from that adapter |
 | `sources://{id}/agents-md` | AGENTS.md content from a GitHub adapter |
 | `sources://{id}/skill-md` | SKILL.md content from a GitHub adapter |
+| `sources://{id}/commits` | Last 20 commits from a GitHub adapter |
+| `sources://{id}/releases` | Latest releases from a GitHub adapter |
+| `sources://{id}/file/{path}` | Arbitrary file contents from a GitHub adapter |
 
 **Tools** (GitHub write operations):
 

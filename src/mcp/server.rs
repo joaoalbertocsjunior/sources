@@ -367,7 +367,7 @@ fn handle_resources_list(state: &McpState) -> Result<Value, McpError> {
             mime_type: Some("application/json".to_owned()),
         });
 
-        // GitHub adapters additionally expose markdown files.
+        // GitHub adapters additionally expose markdown files and extra resources.
         if metas.contains_key(id.as_str()) {
             resources.push(McpResourceDef {
                 uri: format!("sources://{id}/agents-md"),
@@ -379,6 +379,24 @@ fn handle_resources_list(state: &McpState) -> Result<Value, McpError> {
                 uri: format!("sources://{id}/skill-md"),
                 name: format!("{id} — SKILL.md"),
                 description: Some("SKILL.md from the GitHub repository".to_owned()),
+                mime_type: Some("text/plain".to_owned()),
+            });
+            resources.push(McpResourceDef {
+                uri: format!("sources://{id}/commits"),
+                name: format!("{id} — recent commits"),
+                description: Some("Last 20 commits from the GitHub repository".to_owned()),
+                mime_type: Some("application/json".to_owned()),
+            });
+            resources.push(McpResourceDef {
+                uri: format!("sources://{id}/releases"),
+                name: format!("{id} — releases"),
+                description: Some("Latest releases from the GitHub repository".to_owned()),
+                mime_type: Some("application/json".to_owned()),
+            });
+            resources.push(McpResourceDef {
+                uri: format!("sources://{id}/file/{{path}}"),
+                name: format!("{id} — arbitrary file"),
+                description: Some("Arbitrary file contents from the GitHub repository. Replace {path} with the file path.".to_owned()),
                 mime_type: Some("text/plain".to_owned()),
             });
         }
@@ -434,6 +452,12 @@ async fn handle_resources_read(state: &McpState, params: Value) -> Result<Value,
         }
         "agents-md" => fetch_github_file(state, adapter_id, "AGENTS.md").await?,
         "skill-md" => fetch_github_file(state, adapter_id, "SKILL.md").await?,
+        "commits" => fetch_github_commits(state, adapter_id).await?,
+        "releases" => fetch_github_releases(state, adapter_id).await?,
+        other if other.starts_with("file/") => {
+            let file_path = &other["file/".len()..];
+            fetch_github_file(state, adapter_id, file_path).await?
+        }
         other => {
             return Err(McpError {
                 code: ERR_INVALID_PARAMS,
@@ -539,6 +563,105 @@ async fn fetch_github_file(
             message: e.to_string(),
         }),
     }
+}
+
+/// Fetch the last 20 commits from a GitHub repository.
+/// Returns a JSON array string.
+async fn fetch_github_commits(
+    state: &McpState,
+    adapter_id: &str,
+) -> Result<String, McpError> {
+    let meta = {
+        let map = state.github_metas.lock().expect("github_metas lock poisoned");
+        map.get(adapter_id).cloned()
+    };
+    let meta = meta.ok_or_else(|| McpError {
+        code: ERR_INVALID_PARAMS,
+        message: format!("No GitHub metadata registered for adapter '{adapter_id}'"),
+    })?;
+
+    let octo = build_octocrab(&meta).map_err(|e| McpError {
+        code: ERR_INTERNAL,
+        message: e,
+    })?;
+
+    let commits = octo
+        .repos(&meta.owner, &meta.repo)
+        .list_commits()
+        .per_page(20)
+        .send()
+        .await
+        .map_err(|e| McpError {
+            code: ERR_INTERNAL,
+            message: e.to_string(),
+        })?;
+
+    let result: Vec<Value> = commits
+        .items
+        .into_iter()
+        .map(|c| {
+            json!({
+                "sha": c.sha,
+                "message": c.commit.message,
+                "author": c.commit.author.as_ref().map(|a| a.name.as_str()).unwrap_or(""),
+                "date": c.commit.author.as_ref().and_then(|a| a.date.as_ref()).map(|d| d.to_string()).unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    serde_json::to_string(&result).map_err(|e| McpError {
+        code: ERR_INTERNAL,
+        message: e.to_string(),
+    })
+}
+
+/// Fetch the latest releases from a GitHub repository.
+/// Returns a JSON array string.
+async fn fetch_github_releases(
+    state: &McpState,
+    adapter_id: &str,
+) -> Result<String, McpError> {
+    let meta = {
+        let map = state.github_metas.lock().expect("github_metas lock poisoned");
+        map.get(adapter_id).cloned()
+    };
+    let meta = meta.ok_or_else(|| McpError {
+        code: ERR_INVALID_PARAMS,
+        message: format!("No GitHub metadata registered for adapter '{adapter_id}'"),
+    })?;
+
+    let octo = build_octocrab(&meta).map_err(|e| McpError {
+        code: ERR_INTERNAL,
+        message: e,
+    })?;
+
+    let releases = octo
+        .repos(&meta.owner, &meta.repo)
+        .releases()
+        .list()
+        .send()
+        .await
+        .map_err(|e| McpError {
+            code: ERR_INTERNAL,
+            message: e.to_string(),
+        })?;
+
+    let result: Vec<Value> = releases
+        .items
+        .into_iter()
+        .map(|r| {
+            json!({
+                "tag": r.tag_name,
+                "name": r.name.unwrap_or_default(),
+                "published_at": r.published_at.map(|d| d.to_string()).unwrap_or_default(),
+            })
+        })
+        .collect();
+
+    serde_json::to_string(&result).map_err(|e| McpError {
+        code: ERR_INTERNAL,
+        message: e.to_string(),
+    })
 }
 
 // ── Tool handlers ─────────────────────────────────────────────────────────────
