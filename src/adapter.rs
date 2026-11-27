@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 /// An event emitted by a source adapter.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct SourceEvent {
     /// ID of the source adapter that produced this event.
     pub source_id: String,

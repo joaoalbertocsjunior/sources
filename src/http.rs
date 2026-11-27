@@ -12,15 +12,8 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::kinds::{KindDef, KindRegistry};
-use crate::registry::SourceRegistry;
-
-/// Shared state for the HTTP control server.
-#[derive(Clone)]
-struct AppState {
-    registry: Arc<SourceRegistry>,
-    kinds: KindRegistry,
-}
+use crate::kinds::KindDef;
+use crate::service::SourceService;
 
 /// Axum-based HTTP control server.
 ///
@@ -31,33 +24,24 @@ struct AppState {
 /// - `GET  /sources/kinds`       — list all known adapter kinds (built-in + dynamic)
 /// - `POST /sources/kinds`       — register a new adapter kind at runtime
 pub struct HttpControlServer {
-    registry: Arc<SourceRegistry>,
-    kinds: KindRegistry,
+    service: Arc<SourceService>,
     bind_addr: SocketAddr,
 }
 
 impl HttpControlServer {
-    pub fn new(
-        registry: Arc<SourceRegistry>,
-        kinds: KindRegistry,
-        bind_addr: SocketAddr,
-    ) -> Self {
-        Self { registry, kinds, bind_addr }
+    pub fn new(service: Arc<SourceService>, bind_addr: SocketAddr) -> Self {
+        Self { service, bind_addr }
     }
 
     /// Build the axum `Router` (useful for testing without binding a port).
     pub fn router(&self) -> Router {
-        let state = AppState {
-            registry: Arc::clone(&self.registry),
-            kinds: self.kinds.clone(),
-        };
         Router::new()
             .route("/health", get(health))
             .route("/sources", get(list_sources))
             .route("/sources/sync/:id", post(sync_source))
             .route("/sources/kinds", get(list_kinds))
             .route("/sources/kinds", post(register_kind))
-            .with_state(state)
+            .with_state(Arc::clone(&self.service))
     }
 
     /// Bind and serve.
@@ -76,34 +60,31 @@ async fn health() -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status": "ok"})))
 }
 
-async fn list_sources(State(state): State<AppState>) -> impl IntoResponse {
-    let ids = state.registry.list();
-    Json(json!({ "sources": ids }))
+async fn list_sources(State(svc): State<Arc<SourceService>>) -> impl IntoResponse {
+    Json(json!({ "sources": svc.list_sources() }))
 }
 
 async fn sync_source(
-    State(state): State<AppState>,
+    State(svc): State<Arc<SourceService>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let ids = state.registry.list();
-    if ids.contains(&id) {
+    if svc.list_sources().contains(&id) {
         (StatusCode::OK, Json(json!({ "id": id, "status": "sync_triggered" })))
     } else {
         (StatusCode::NOT_FOUND, Json(json!({ "error": "source not found", "id": id })))
     }
 }
 
-async fn list_kinds(State(state): State<AppState>) -> impl IntoResponse {
-    let kinds = state.kinds.list();
-    Json(json!({ "kinds": kinds }))
+async fn list_kinds(State(svc): State<Arc<SourceService>>) -> impl IntoResponse {
+    Json(json!({ "kinds": svc.list_kinds() }))
 }
 
 async fn register_kind(
-    State(state): State<AppState>,
+    State(svc): State<Arc<SourceService>>,
     Json(def): Json<KindDef>,
 ) -> impl IntoResponse {
     let kind = def.kind.clone();
-    state.kinds.register(def);
+    svc.register_kind(def);
     tracing::info!("Registered new source kind: {kind}");
     (StatusCode::CREATED, Json(json!({ "kind": kind, "status": "registered" })))
 }

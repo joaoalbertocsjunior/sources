@@ -31,6 +31,8 @@ pub mod http;
 pub mod kinds;
 pub mod m2m;
 pub mod registry;
+pub mod service;
+pub mod store;
 
 // Re-export the most commonly used types at the crate root.
 pub use adapter::{AdapterError, SourceAdapter, SourceEvent};
@@ -40,3 +42,5 @@ pub use http::HttpControlServer;
 pub use kinds::{KindBacking, KindDef, KindRegistry};
 pub use m2m::M2MServer;
 pub use registry::SourceRegistry;
+pub use service::SourceService;
+pub use store::{Store, StoredSource};

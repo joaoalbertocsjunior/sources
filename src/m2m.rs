@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use crate::kinds::KindRegistry;
+use crate::kinds::KindDef;
+use crate::service::SourceService;
 
 pub type Handler = Box<dyn Fn(Value) -> Value + Send + Sync>;
 
@@ -65,35 +66,44 @@ impl M2MServer {
         map.insert(method.into(), Box::new(handler));
     }
 
-    /// Build the axum router.
-    pub fn router(&self) -> Router {
-        let state = M2MState {
-            handlers: Arc::clone(&self.handlers),
-        };
-        Router::new().route("/rpc", post(rpc_handler)).with_state(state)
-    }
+    /// Wire the built-in `sources.*` methods backed by a [`SourceService`].
+    ///
+    /// Methods registered:
+    /// - `sources.list`           — list source IDs
+    /// - `sources.list_kinds`     — list all kinds (built-in + dynamic)
+    /// - `sources.register_kind`  — register a new kind, persists if store attached
+    pub async fn wire_service(&self, service: Arc<SourceService>) {
+        let s = Arc::clone(&service);
+        self.register("sources.list", move |_| {
+            serde_json::to_value(s.list_sources()).unwrap_or(Value::Array(vec![]))
+        })
+        .await;
 
-    /// Wire up the built-in `sources.register_kind` and `sources.list_kinds`
-    /// methods backed by the given `KindRegistry`.
-    pub async fn wire_kinds(&self, kinds: KindRegistry) {
-        let kr = kinds.clone();
-        self.register("sources.list_kinds", move |_params| {
-            let list = kr.list();
-            serde_json::to_value(list).unwrap_or(Value::Array(vec![]))
+        let s = Arc::clone(&service);
+        self.register("sources.list_kinds", move |_| {
+            serde_json::to_value(s.list_kinds()).unwrap_or(Value::Array(vec![]))
         })
         .await;
 
         self.register("sources.register_kind", move |params| {
-            match serde_json::from_value::<crate::kinds::KindDef>(params) {
+            match serde_json::from_value::<KindDef>(params) {
                 Ok(def) => {
                     let name = def.kind.clone();
-                    kinds.register(def);
+                    service.register_kind(def);
                     serde_json::json!({ "kind": name, "status": "registered" })
                 }
                 Err(e) => serde_json::json!({ "error": e.to_string() }),
             }
         })
         .await;
+    }
+
+    /// Build the axum router.
+    pub fn router(&self) -> Router {
+        let state = M2MState {
+            handlers: Arc::clone(&self.handlers),
+        };
+        Router::new().route("/rpc", post(rpc_handler)).with_state(state)
     }
 
     /// Bind and serve.

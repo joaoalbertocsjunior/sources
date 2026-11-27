@@ -79,7 +79,7 @@ impl Default for KindRegistry {
     }
 }
 
-const BUILTIN_KINDS: &[&str] = &[
+pub(crate) const BUILTIN_KINDS: &[&str] = &[
     "file",
     "shell",
     "env",

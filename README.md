@@ -17,6 +17,7 @@ LangChain, LlamaIndex, and the MCP SDKs are Python/TypeScript-first. If you're r
 - **14 built-in adapters** — file, shell, env, HTTP poll, webhook, Git, GitHub, database, directory, codebase, local data, metrics, MCP, A2A
 - **Event bus** — broadcast fan-out so multiple consumers subscribe to adapter events independently
 - **HTTP control plane** — REST API over the full adapter registry, ready for dashboards and orchestrators
+- **File-backed persistence** — kinds, source configs, and event log survive restarts with no external database
 
 ---
 
@@ -53,6 +54,7 @@ let rows = registry.sync(&record.id)?;
 | `shell` | Run shell commands, capture stdout |
 | `env` | Environment variable snapshots |
 | `http_poll` | Poll HTTP endpoints at an interval |
+| `webhook` | Receive HTTP push events (reverse of `http_poll`) |
 | `git` | Git repo state, commits, diffs |
 | `github` | GitHub issues, PRs, releases via API |
 | `database` | Postgres query results (SQLx) |
@@ -62,7 +64,6 @@ let rows = registry.sync(&record.id)?;
 | `local_data` | Arbitrary local JSON/YAML data files |
 | `metric` | Numeric metric streams |
 | `a2a` | A2A agent endpoints |
-| `webhook` | Receive HTTP push events (reverse of `http_poll`) |
 
 ---
 
@@ -71,43 +72,51 @@ let rows = registry.sync(&record.id)?;
 Expose your registry over JSON-RPC 2.0 so any language can call it over HTTP:
 
 ```rust
-use sources_lib::m2m::{M2MServer, M2MClient};
+use std::sync::Arc;
+use sources_lib::{SourceRegistry, KindRegistry, SourceService, M2MServer};
 
-let server = M2MServer::new(|token| token == "secret");
-server.register("echo", |params| Ok(params));
-server.start(7000).await?;
+let service = Arc::new(
+    SourceService::new(Arc::new(SourceRegistry::new()), KindRegistry::new())
+);
 
-// from any language — curl, Go, Python, Node, ...
-let client = M2MClient::new("http://127.0.0.1:7000", "secret");
-let result = client.call("echo", serde_json::json!({"msg": "hi"})).await?;
+let server = M2MServer::new("0.0.0.0:7000".parse().unwrap());
+server.wire_service(Arc::clone(&service)).await;  // registers sources.* methods
+server.register("echo", |params| params).await;   // add custom methods
+server.serve().await?;
 ```
+
+Built-in methods wired by `wire_service`:
+
+| Method | Description |
+|---|---|
+| `sources.list` | List registered source IDs |
+| `sources.list_kinds` | List all kinds (built-in + dynamic) |
+| `sources.register_kind` | Register a new kind, persisted if store attached |
 
 ---
 
 ## HTTP control plane
 
 ```rust
-use sources_lib::{SourceRegistry, KindRegistry, http::HttpControlServer};
+use std::sync::Arc;
+use sources_lib::{SourceRegistry, KindRegistry, SourceService, Store, HttpControlServer};
 
-let registry = SourceRegistry::new();
-let kinds = KindRegistry::new();
-let server = HttpControlServer::new(registry, kinds, addr);
+let service = Arc::new(
+    SourceService::new(Arc::new(SourceRegistry::new()), KindRegistry::new())
+        .with_store(Arc::new(Store::open("./data")?))
+);
+
+let server = HttpControlServer::new(Arc::clone(&service), "0.0.0.0:8080".parse().unwrap());
 server.serve().await?;
 ```
 
 | Method | Route | Description |
 |---|---|---|
 | GET | `/health` | Liveness check |
-| GET | `/sources` | List all registered sources |
-| GET | `/sources/kinds` | List available adapter kinds (built-in + dynamic) |
-| POST | `/sources/kinds` | **Register a new adapter kind at runtime** |
-| POST | `/sources` | Register a new source instance |
+| GET | `/sources` | List registered source IDs |
+| GET | `/sources/kinds` | List all kinds (built-in + dynamic) |
+| POST | `/sources/kinds` | Register a new adapter kind at runtime |
 | POST | `/sources/{id}/sync` | Sync a source, return records |
-| POST | `/sources/{id}/verify` | Verify source connectivity |
-| POST | `/sources/{id}/act/{action}` | Trigger a source action |
-| POST | `/rpc` | JSON-RPC 2.0 endpoint |
-| GET | `/jobs` | List background jobs |
-| GET | `/jobs/{id}` | Job status |
 
 ---
 
@@ -126,9 +135,6 @@ curl -X POST http://localhost:8080/sources/kinds \
     "backing": {"type": "shell", "command": "my-harvester --id {{id}}"}
   }'
 # → {"kind":"my_script","status":"registered"}
-
-curl http://localhost:8080/sources/kinds
-# → {"kinds": [..., {"kind":"my_script", ...}]}
 ```
 
 **Over M2M (JSON-RPC 2.0):**
@@ -144,28 +150,45 @@ curl -X POST http://localhost:7000/rpc \
       "backing": {"type": "shell", "command": "my-harvester --id {{id}}"}
     }
   }'
-
-curl -X POST http://localhost:7000/rpc \
-  -d '{"method": "sources.list_kinds", "params": {}}'
 ```
 
-**In Rust:**
+Dynamic kinds are stored to `kinds.json` automatically and reloaded on the next startup when a `Store` is attached.
+
+---
+
+## Persistence
+
+Attach a `Store` to a `SourceService` to enable file-backed persistence with no external database required.
 
 ```rust
-use sources_lib::{KindRegistry, KindDef, KindBacking};
+use std::sync::Arc;
+use sources_lib::{SourceRegistry, KindRegistry, SourceService, Store, StoredSource};
 
-let kinds = KindRegistry::new();
-kinds.register(KindDef {
-    kind: "my_script".into(),
-    description: "Custom shell-backed adapter".into(),
-    backing: KindBacking::Shell { command: "my-harvester --id {{id}}".into() },
-});
+let store = Arc::new(Store::open("./data")?);
 
-// Wire into the M2M server so remote callers can register kinds too
-server.wire_kinds(kinds).await;
+// on startup: load previously saved sources so the application can re-register them
+let service = Arc::new(
+    SourceService::new(Arc::new(SourceRegistry::new()), KindRegistry::new())
+        .with_store(Arc::clone(&store))   // also reloads persisted dynamic kinds
+);
+let saved = service.load_sources();       // Vec<StoredSource> from sources.json
+
+// after registering adapters: persist their configs for next restart
+service.save_sources(&[
+    StoredSource { id: "logs".into(), kind: "file".into(), config: serde_json::json!({"path": "/var/log/app.log"}) },
+]);
+
+// log events as they are produced
+service.log_event(&event);               // appends to events.jsonl
 ```
 
-Built-in kinds are pre-populated; dynamic kinds layer on top and persist for the lifetime of the process.
+**Files written inside the store directory:**
+
+| File | Contents |
+|---|---|
+| `kinds.json` | Dynamically registered kind definitions (built-ins excluded) |
+| `sources.json` | Adapter config snapshots saved by the application |
+| `events.jsonl` | Append-only newline-delimited JSON event log |
 
 ---
 
@@ -188,8 +211,8 @@ bridge.run(&registry).await?;
 use sources_lib::events::EventBus;
 
 let bus = EventBus::new();
-bus.subscribe("source.synced", |event| println!("{:?}", event));
-bus.publish("source.synced", serde_json::json!({"source_id": "logs"}));
+let mut rx = bus.subscribe();
+bus.publish(event);
 ```
 
 ---
@@ -198,13 +221,15 @@ bus.publish("source.synced", serde_json::json!({"source_id": "logs"}));
 
 | Module | Contents |
 |---|---|
-| `sources_lib` | `SourceAdapter` trait, `SourceRegistry`, `SourceRecord`, `SourceError` |
+| `sources_lib` | `SourceAdapter` trait, `SourceRegistry`, `SourceEvent`, `AdapterError` |
 | `sources_lib::adapters` | All 14 built-in adapters |
 | `sources_lib::kinds` | `KindRegistry`, `KindDef`, `KindBacking` — runtime kind registration |
-| `sources_lib::m2m` | JSON-RPC 2.0 server (`sources.register_kind`, `sources.list_kinds`, custom handlers) |
-| `sources_lib::http` | Axum REST control server (`POST /sources/kinds`, full CRUD) |
+| `sources_lib::service` | `SourceService` — shared business logic for HTTP and M2M |
+| `sources_lib::store` | `Store`, `StoredSource` — file-backed persistence |
+| `sources_lib::m2m` | JSON-RPC 2.0 server with `wire_service` |
+| `sources_lib::http` | Axum REST control server |
 | `sources_lib::bridge` | Stateless source-to-source connector |
-| `sources_lib::events` | `EventBus` pub/sub, `EventEmitter` |
+| `sources_lib::events` | `EventBus` broadcast pub/sub |
 | `sources_lib::registry` | `SourceRegistry` |
 
 ---
