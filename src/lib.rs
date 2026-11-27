@@ -28,6 +28,7 @@ pub mod adapters;
 pub mod bridge;
 pub mod events;
 pub mod http;
+pub mod kinds;
 pub mod m2m;
 pub mod registry;
 
@@ -36,5 +37,6 @@ pub use adapter::{AdapterError, SourceAdapter, SourceEvent};
 pub use bridge::SourceBridge;
 pub use events::EventBus;
 pub use http::HttpControlServer;
+pub use kinds::{KindBacking, KindDef, KindRegistry};
 pub use m2m::M2MServer;
 pub use registry::SourceRegistry;

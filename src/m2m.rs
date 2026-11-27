@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
+use crate::kinds::KindRegistry;
+
 pub type Handler = Box<dyn Fn(Value) -> Value + Send + Sync>;
 
 /// A minimal JSON-RPC-style server built on axum.
@@ -69,6 +71,29 @@ impl M2MServer {
             handlers: Arc::clone(&self.handlers),
         };
         Router::new().route("/rpc", post(rpc_handler)).with_state(state)
+    }
+
+    /// Wire up the built-in `sources.register_kind` and `sources.list_kinds`
+    /// methods backed by the given `KindRegistry`.
+    pub async fn wire_kinds(&self, kinds: KindRegistry) {
+        let kr = kinds.clone();
+        self.register("sources.list_kinds", move |_params| {
+            let list = kr.list();
+            serde_json::to_value(list).unwrap_or(Value::Array(vec![]))
+        })
+        .await;
+
+        self.register("sources.register_kind", move |params| {
+            match serde_json::from_value::<crate::kinds::KindDef>(params) {
+                Ok(def) => {
+                    let name = def.kind.clone();
+                    kinds.register(def);
+                    serde_json::json!({ "kind": name, "status": "registered" })
+                }
+                Err(e) => serde_json::json!({ "error": e.to_string() }),
+            }
+        })
+        .await;
     }
 
     /// Bind and serve.

@@ -14,7 +14,7 @@ LangChain, LlamaIndex, and the MCP SDKs are Python/TypeScript-first. If you're r
 
 - **Language-agnostic** — JSON-RPC 2.0 wire protocol; call it from any runtime
 - **Standalone binary** — spawn as a sidecar subprocess, no Python install needed on the target host
-- **13 built-in adapters** — file, shell, env, HTTP poll, Git, GitHub, database, directory, codebase, local data, metrics, MCP, A2A
+- **14 built-in adapters** — file, shell, env, HTTP poll, webhook, Git, GitHub, database, directory, codebase, local data, metrics, MCP, A2A
 - **Event bus** — broadcast fan-out so multiple consumers subscribe to adapter events independently
 - **HTTP control plane** — REST API over the full adapter registry, ready for dashboards and orchestrators
 
@@ -62,6 +62,7 @@ let rows = registry.sync(&record.id)?;
 | `local_data` | Arbitrary local JSON/YAML data files |
 | `metric` | Numeric metric streams |
 | `a2a` | A2A agent endpoints |
+| `webhook` | Receive HTTP push events (reverse of `http_poll`) |
 
 ---
 
@@ -86,25 +87,85 @@ let result = client.call("echo", serde_json::json!({"msg": "hi"})).await?;
 ## HTTP control plane
 
 ```rust
-use sources_lib::{SourceRegistry, http::HttpControlServer};
+use sources_lib::{SourceRegistry, KindRegistry, http::HttpControlServer};
 
 let registry = SourceRegistry::new();
-let server = HttpControlServer::new(registry, |token| token == "mytoken");
-server.start(8080).await?;
+let kinds = KindRegistry::new();
+let server = HttpControlServer::new(registry, kinds, addr);
+server.serve().await?;
 ```
 
 | Method | Route | Description |
 |---|---|---|
 | GET | `/health` | Liveness check |
 | GET | `/sources` | List all registered sources |
-| GET | `/sources/kinds` | List available adapter kinds |
-| POST | `/sources` | Register a new source |
+| GET | `/sources/kinds` | List available adapter kinds (built-in + dynamic) |
+| POST | `/sources/kinds` | **Register a new adapter kind at runtime** |
+| POST | `/sources` | Register a new source instance |
 | POST | `/sources/{id}/sync` | Sync a source, return records |
 | POST | `/sources/{id}/verify` | Verify source connectivity |
 | POST | `/sources/{id}/act/{action}` | Trigger a source action |
 | POST | `/rpc` | JSON-RPC 2.0 endpoint |
 | GET | `/jobs` | List background jobs |
 | GET | `/jobs/{id}` | Job status |
+
+---
+
+## Dynamic kind registration
+
+New adapter **kinds** (types) can be registered at runtime without recompiling — over both HTTP and M2M.
+
+**Over HTTP:**
+
+```bash
+curl -X POST http://localhost:8080/sources/kinds \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "kind": "my_script",
+    "description": "Custom shell-backed adapter",
+    "backing": {"type": "shell", "command": "my-harvester --id {{id}}"}
+  }'
+# → {"kind":"my_script","status":"registered"}
+
+curl http://localhost:8080/sources/kinds
+# → {"kinds": [..., {"kind":"my_script", ...}]}
+```
+
+**Over M2M (JSON-RPC 2.0):**
+
+```bash
+curl -X POST http://localhost:7000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "method": "sources.register_kind",
+    "params": {
+      "kind": "my_script",
+      "description": "Custom shell-backed adapter",
+      "backing": {"type": "shell", "command": "my-harvester --id {{id}}"}
+    }
+  }'
+
+curl -X POST http://localhost:7000/rpc \
+  -d '{"method": "sources.list_kinds", "params": {}}'
+```
+
+**In Rust:**
+
+```rust
+use sources_lib::{KindRegistry, KindDef, KindBacking};
+
+let kinds = KindRegistry::new();
+kinds.register(KindDef {
+    kind: "my_script".into(),
+    description: "Custom shell-backed adapter".into(),
+    backing: KindBacking::Shell { command: "my-harvester --id {{id}}".into() },
+});
+
+// Wire into the M2M server so remote callers can register kinds too
+server.wire_kinds(kinds).await;
+```
+
+Built-in kinds are pre-populated; dynamic kinds layer on top and persist for the lifetime of the process.
 
 ---
 
@@ -138,9 +199,10 @@ bus.publish("source.synced", serde_json::json!({"source_id": "logs"}));
 | Module | Contents |
 |---|---|
 | `sources_lib` | `SourceAdapter` trait, `SourceRegistry`, `SourceRecord`, `SourceError` |
-| `sources_lib::adapters` | All 13 built-in adapters |
-| `sources_lib::m2m` | JSON-RPC 2.0 server and client |
-| `sources_lib::http` | Axum-based REST control server |
+| `sources_lib::adapters` | All 14 built-in adapters |
+| `sources_lib::kinds` | `KindRegistry`, `KindDef`, `KindBacking` — runtime kind registration |
+| `sources_lib::m2m` | JSON-RPC 2.0 server (`sources.register_kind`, `sources.list_kinds`, custom handlers) |
+| `sources_lib::http` | Axum REST control server (`POST /sources/kinds`, full CRUD) |
 | `sources_lib::bridge` | Stateless source-to-source connector |
 | `sources_lib::events` | `EventBus` pub/sub, `EventEmitter` |
 | `sources_lib::registry` | `SourceRegistry` |
