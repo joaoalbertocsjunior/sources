@@ -94,4 +94,5 @@ pub(crate) const BUILTIN_KINDS: &[&str] = &[
     "local_data",
     "metric",
     "a2a",
+    "mcp_server",
 ];

@@ -14,7 +14,7 @@ LangChain, LlamaIndex, and the MCP SDKs are Python/TypeScript-first. If you're r
 
 - **Language-agnostic** — JSON-RPC 2.0 wire protocol; call it from any runtime
 - **Standalone binary** — spawn as a sidecar subprocess, no Python install needed on the target host
-- **14 built-in adapters** — file, shell, env, HTTP poll, webhook, Git, GitHub, database, directory, codebase, local data, metrics, MCP, A2A
+- **15 built-in adapters** — file, shell, env, HTTP poll, webhook, Git, GitHub, database, directory, codebase, local data, metrics, MCP server, A2A
 - **Event bus** — broadcast fan-out so multiple consumers subscribe to adapter events independently
 - **HTTP control plane** — REST API over the full adapter registry, ready for dashboards and orchestrators
 - **File-backed persistence** — kinds, source configs, and event log survive restarts with no external database
@@ -64,6 +64,51 @@ let rows = registry.sync(&record.id)?;
 | `local_data` | Arbitrary local JSON/YAML data files |
 | `metric` | Numeric metric streams |
 | `a2a` | A2A agent endpoints |
+| `mcp_server` | Upstream MCP servers as sources — pulls resources via MCP protocol |
+
+---
+
+## MCP server
+
+sources-lib can expose itself as an MCP server so any MCP client (Claude Code, goose, URACE, etc.) can read from all adapters via MCP `resources` and write to GitHub via MCP `tools`.
+
+```rust
+use std::{net::SocketAddr, sync::Arc};
+use sources_lib::{McpServer, SourceRegistry, KindRegistry, SourceService};
+
+let service = Arc::new(
+    SourceService::new(Arc::new(SourceRegistry::new()), KindRegistry::new())
+);
+
+let server = McpServer::new(Arc::clone(&service), "0.0.0.0:7700".parse().unwrap());
+
+// Register GitHub adapters for write-side tools
+server.register_github("my-repo", "owner", "repo", Some("ghp_token"));
+
+server.serve().await?;
+```
+
+**MCP endpoint:** `POST /mcp` — JSON-RPC 2.0, MCP protocol version `2024-11-05`
+
+**Resources** (read-only, no auth):
+
+| URI pattern | Returns |
+|---|---|
+| `sources://{id}/events` | Latest synced events from that adapter |
+| `sources://{id}/agents-md` | AGENTS.md content from a GitHub adapter |
+| `sources://{id}/skill-md` | SKILL.md content from a GitHub adapter |
+
+**Tools** (GitHub write operations):
+
+| Tool | Description |
+|---|---|
+| `github_create_issue` | Create a GitHub issue |
+| `github_close_issue` | Close a GitHub issue |
+| `github_comment_on_issue` | Comment on an issue or PR |
+| `github_create_pr` | Open a pull request |
+| `github_trigger_workflow` | Trigger a workflow dispatch |
+| `github_update_file` | Create or update a file (for AGENTS.md, SKILL.md, etc.) |
+| `github_create_release` | Create a release |
 
 ---
 
@@ -231,6 +276,7 @@ bus.publish(event);
 | `sources_lib::bridge` | Stateless source-to-source connector |
 | `sources_lib::events` | `EventBus` broadcast pub/sub |
 | `sources_lib::registry` | `SourceRegistry` |
+| `sources_lib::mcp` | `McpServer` — MCP 2024-11-05 server exposing adapters as resources and GitHub write tools |
 
 ---
 
